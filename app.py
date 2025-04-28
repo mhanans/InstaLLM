@@ -19,33 +19,31 @@ custom_css = """
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif !important;
 }
 
-.gradio-header {
+/* Title box styling */
+.title-box {
     background: linear-gradient(135deg, var(--primary-color), var(--secondary-color)) !important;
     padding: 2rem !important;
     border-radius: 10px !important;
     margin-bottom: 2rem !important;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1) !important;
+    text-align: center !important;
 }
 
-/* Add specific styling for markdown content */
-.gradio-markdown h1 {
+.title-box h1 {
     color: white !important;
     font-size: 2.5rem !important;
     margin: 0 !important;
-    text-align: center !important;
     text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3) !important;
 }
 
-.gradio-markdown h2 {
+.title-box h2 {
     color: rgba(255, 255, 255, 0.9) !important;
-    text-align: center !important;
     margin: 0.5rem 0 0 0 !important;
     text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.2) !important;
 }
 
-.gradio-markdown p {
+.title-box p {
     color: rgba(255, 255, 255, 0.9) !important;
-    text-align: center !important;
     margin: 0.5rem 0 0 0 !important;
     text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.2) !important;
 }
@@ -133,16 +131,7 @@ class InstaLLM:
         self.available_models = []
         for file in os.listdir(self.models_dir):
             if file.endswith(".gguf"):
-                # Try to validate the model file
-                try:
-                    model_path = os.path.join(self.models_dir, file)
-                    # Quick check if the model is loadable
-                    test_model = Llama(model_path=model_path, n_ctx=1)
-                    del test_model  # Clean up
-                    self.available_models.append(file)
-                    print(f"Validated model: {file}")
-                except Exception as e:
-                    print(f"Warning: Model {file} is not compatible: {str(e)}")
+                self.available_models.append(file)
         print(f"Available models: {self.available_models}")
     
     def load_model(self, model_name: str) -> str:
@@ -190,12 +179,13 @@ def create_interface():
     ) as interface:
         with gr.Row():
             with gr.Column(scale=1):
-                gr.Markdown("""
-                # InstaLLM
-                ## Powered by HANYA.inc
-                
-                Your personal AI assistant powered by local LLMs.
-                """)
+                with gr.Box(elem_classes="title-box"):
+                    gr.Markdown("""
+                    # InstaLLM
+                    ## Powered by HANYA.inc
+                    
+                    Your personal AI assistant powered by local LLMs.
+                    """)
         
         with gr.Row():
             with gr.Column(scale=1):
@@ -232,10 +222,7 @@ def create_interface():
         
         def update_model_list():
             insta_llm._load_available_models()
-            return gr.Dropdown.update(
-                choices=insta_llm.available_models,
-                value=insta_llm.available_models[0] if insta_llm.available_models else None
-            )
+            return {"choices": insta_llm.available_models, "value": insta_llm.available_models[0] if insta_llm.available_models else None}
         
         def load_selected_model(model_name):
             return insta_llm.load_model(model_name)
