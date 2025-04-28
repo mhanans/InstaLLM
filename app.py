@@ -125,6 +125,16 @@ class InstaLLM:
         
         # Load available models
         self._load_available_models()
+        
+        # System prompt for better responses
+        self.system_prompt = """You are InstaLLM, a helpful and professional AI assistant. 
+Your responses should be:
+1. Clear and concise
+2. Focused on the user's request
+3. Professional and informative
+4. Well-structured and easy to read
+
+Always maintain a helpful and professional tone. If you're unsure about something, say so rather than making things up."""
     
     def _load_available_models(self):
         """Load all .gguf files from the models directory"""
@@ -147,8 +157,8 @@ class InstaLLM:
                 model_path = os.path.join(self.models_dir, model_name)
                 self.models[model_name] = Llama(
                     model_path=model_path,
-                    n_ctx=2048,  # Adjust context size as needed
-                    n_threads=4   # Adjust thread count as needed
+                    n_ctx=2048,
+                    n_threads=4
                 )
                 return f"Model {model_name} loaded successfully!"
             except Exception as e:
@@ -164,8 +174,32 @@ class InstaLLM:
             return "Please load the model first!"
         
         try:
-            response = self.models[model_name](prompt, max_tokens=2000)
-            return response['choices'][0]['text']
+            # Format the prompt with system context
+            formatted_prompt = f"""<|system|>
+{self.system_prompt}
+</|system|>
+<|user|>
+{prompt}
+</|user|>
+<|assistant|>
+"""
+            
+            # Generate response with proper formatting
+            response = self.models[model_name](
+                formatted_prompt,
+                max_tokens=2000,
+                temperature=0.7,
+                top_p=0.9,
+                stop=["</|assistant|>", "<|user|>", "<|system|>"]
+            )
+            
+            # Extract and clean the response
+            response_text = response['choices'][0]['text'].strip()
+            
+            # Remove any remaining tags
+            response_text = response_text.replace("</|assistant|>", "").strip()
+            
+            return response_text
         except Exception as e:
             return f"Error generating response: {str(e)}"
 
