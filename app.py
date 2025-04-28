@@ -118,6 +118,7 @@ class InstaLLM:
         self.models_dir = models_dir
         self.models: Dict[str, Llama] = {}
         self.available_models = []
+        self.conversation_history: Dict[str, List[Dict[str, str]]] = {}
         
         # Create models directory if it doesn't exist
         if not os.path.exists(models_dir):
@@ -160,6 +161,8 @@ Always maintain a helpful and professional tone. If you're unsure about somethin
                     n_ctx=2048,
                     n_threads=4
                 )
+                # Initialize conversation history for this model
+                self.conversation_history[model_name] = []
                 return f"Model {model_name} loaded successfully!"
             except Exception as e:
                 return f"Error loading model: {str(e)}"
@@ -174,19 +177,32 @@ Always maintain a helpful and professional tone. If you're unsure about somethin
             return "Please load the model first!"
         
         try:
-            # Format the prompt with system context
-            formatted_prompt = f"""<|system|>
+            # Add the new user message to conversation history
+            self.conversation_history[model_name].append({"role": "user", "content": prompt})
+            
+            # Build the full conversation context
+            conversation_context = f"""<|system|>
 {self.system_prompt}
 </|system|>
-<|user|>
-{prompt}
-</|user|>
-<|assistant|>
 """
+            # Add conversation history
+            for message in self.conversation_history[model_name]:
+                if message["role"] == "user":
+                    conversation_context += f"""<|user|>
+{message['content']}
+</|user|>
+"""
+                else:
+                    conversation_context += f"""<|assistant|>
+{message['content']}
+</|assistant|>
+"""
+            # Add the current assistant tag
+            conversation_context += "<|assistant|>\n"
             
             # Generate response with proper formatting
             response = self.models[model_name](
-                formatted_prompt,
+                conversation_context,
                 max_tokens=2000,
                 temperature=0.7,
                 top_p=0.9,
@@ -195,9 +211,10 @@ Always maintain a helpful and professional tone. If you're unsure about somethin
             
             # Extract and clean the response
             response_text = response['choices'][0]['text'].strip()
-            
-            # Remove any remaining tags
             response_text = response_text.replace("</|assistant|>", "").strip()
+            
+            # Add the assistant's response to conversation history
+            self.conversation_history[model_name].append({"role": "assistant", "content": response_text})
             
             return response_text
         except Exception as e:
