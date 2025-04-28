@@ -19,8 +19,8 @@ custom_css = """
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif !important;
 }
 
-/* Title box styling */
-.title-box {
+/* Title container styling */
+.title-container {
     background: linear-gradient(135deg, var(--primary-color), var(--secondary-color)) !important;
     padding: 2rem !important;
     border-radius: 10px !important;
@@ -29,20 +29,20 @@ custom_css = """
     text-align: center !important;
 }
 
-.title-box h1 {
+.title-container h1 {
     color: white !important;
     font-size: 2.5rem !important;
     margin: 0 !important;
     text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3) !important;
 }
 
-.title-box h2 {
+.title-container h2 {
     color: rgba(255, 255, 255, 0.9) !important;
     margin: 0.5rem 0 0 0 !important;
     text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.2) !important;
 }
 
-.title-box p {
+.title-container p {
     color: rgba(255, 255, 255, 0.9) !important;
     margin: 0.5rem 0 0 0 !important;
     text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.2) !important;
@@ -178,14 +178,13 @@ def create_interface():
         css=custom_css
     ) as interface:
         with gr.Row():
-            with gr.Column(scale=1):
-                with gr.Box(elem_classes="title-box"):
-                    gr.Markdown("""
-                    # InstaLLM
-                    ## Powered by HANYA.inc
-                    
-                    Your personal AI assistant powered by local LLMs.
-                    """)
+            with gr.Column(scale=1, elem_classes="title-container"):
+                gr.Markdown("""
+                # InstaLLM
+                ## Powered by HANYA.inc
+                
+                Your personal AI assistant powered by local LLMs.
+                """)
         
         with gr.Row():
             with gr.Column(scale=1):
