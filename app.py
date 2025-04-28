@@ -4,6 +4,7 @@ from llama_cpp import Llama
 from typing import List, Dict
 import subprocess
 import json
+import sys
 
 # Custom CSS for styling
 custom_css = """
@@ -227,20 +228,52 @@ Always maintain a helpful and professional tone. If you're unsure about somethin
             model_info = self.models[model_name]
             
             if model_info["type"] == "bitnet":
-                # Run BitNet inference
-                cmd = [
-                    "python",
-                    "run_inference.py",
-                    "-m", model_info["path"],
-                    "-p", conversation_context,
-                    "-cnv"
-                ]
-                
-                result = subprocess.run(cmd, capture_output=True, text=True)
-                if result.returncode != 0:
-                    return f"Error running BitNet inference: {result.stderr}"
-                
-                response_text = result.stdout.strip()
+                # Run BitNet inference with enhanced error handling
+                try:
+                    # First, verify the model file exists
+                    if not os.path.exists(model_info["path"]):
+                        return f"Error: BitNet model file not found at {model_info['path']}"
+                    
+                    # Verify run_inference.py exists
+                    if not os.path.exists("run_inference.py"):
+                        return "Error: run_inference.py not found. Please ensure it's in the same directory as app.py"
+                    
+                    # Run inference with full path to Python
+                    python_path = sys.executable
+                    cmd = [
+                        python_path,
+                        "run_inference.py",
+                        "-m", model_info["path"],
+                        "-p", conversation_context,
+                        "-cnv",
+                        "-t", "4",  # Use 4 threads
+                        "-c", "2048",  # Context size
+                        "-temp", "0.7"  # Temperature
+                    ]
+                    
+                    print(f"Running BitNet command: {' '.join(cmd)}")  # Debug output
+                    
+                    result = subprocess.run(cmd, capture_output=True, text=True)
+                    
+                    if result.returncode != 0:
+                        error_msg = f"BitNet inference error (code {result.returncode}):\n"
+                        error_msg += f"STDOUT: {result.stdout}\n"
+                        error_msg += f"STDERR: {result.stderr}"
+                        print(error_msg)  # Debug output
+                        return error_msg
+                    
+                    response_text = result.stdout.strip()
+                    if not response_text:
+                        return "Error: BitNet returned empty response"
+                    
+                    return response_text
+                    
+                except Exception as e:
+                    error_msg = f"Error running BitNet inference: {str(e)}\n"
+                    error_msg += f"Python path: {python_path}\n"
+                    error_msg += f"Model path: {model_info['path']}"
+                    print(error_msg)  # Debug output
+                    return error_msg
             else:
                 # Generate response with proper formatting
                 response = model_info["model"](
