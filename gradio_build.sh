@@ -287,6 +287,65 @@ run_gradio_app() {
     python app.py
 }
 
+# Function to setup BitNet
+setup_bitnet() {
+    print_highlight "Setting up BitNet..."
+    
+    # Clone BitNet repository
+    if [ ! -d "BitNet" ]; then
+        git clone --recursive https://github.com/microsoft/BitNet.git
+    fi
+    
+    cd BitNet
+    
+    # Install BitNet dependencies
+    pip install -r requirements.txt
+    
+    # Create necessary directories and files
+    mkdir -p include
+    touch include/bitnet-lut-kernels.h
+    
+    # Build BitNet
+    mkdir -p build
+    cd build
+    
+    # Configure with specific options
+    cmake .. \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DLLAMA_OPENMP=ON \
+        -DLLAMA_CURL=ON \
+        -DBUILD_SHARED_LIBS=ON
+    
+    make -j$(nproc)
+    
+    # Create symlink to llama-cli
+    cd ..
+    ln -sf build/bin/llama-cli llama-cli
+    
+    # Check if model already exists
+    if [ ! -f "models/BitNet-b1.58-2B-4T/ggml-model-i2_s.gguf" ]; then
+        # Download BitNet model only if it doesn't exist
+        mkdir -p models
+        huggingface-cli download microsoft/BitNet-b1.58-2B-4T-gguf --local-dir models/BitNet-b1.58-2B-4T
+    else
+        echo "BitNet model already exists, skipping download."
+    fi
+    
+    # Setup BitNet environment
+    python setup_env.py -md models/BitNet-b1.58-2B-4T -q i2_s
+    
+    # Return to original directory
+    cd ..
+    
+    # Create symbolic link to the BitNet model with correct naming
+    mkdir -p models
+    cd models
+    if [ -f "../BitNet/models/BitNet-b1.58-2B-4T/ggml-model-i2_s.gguf" ]; then
+        ln -sf ../BitNet/models/BitNet-b1.58-2B-4T/ggml-model-i2_s.gguf ggml-model-i2_s.gguf
+    fi
+    cd ..
+}
+
 # Main installation process
 main() {
     print_highlight "Starting installation process..."
@@ -306,6 +365,9 @@ main() {
     # Setup llama library
     setup_llama_library
     
+    # Setup BitNet
+    setup_bitnet
+    
     # Download model file
     download_model
     
@@ -315,34 +377,6 @@ main() {
 
 # Run main function
 main
-
-# Clone and setup BitNet
-echo "Setting up BitNet..."
-git clone --recursive https://github.com/microsoft/BitNet.git
-cd BitNet
-
-# Install BitNet dependencies
-pip install -r requirements.txt
-
-# Build BitNet
-mkdir -p build
-cd build
-cmake ..
-make -j$(nproc)
-
-# Create symlink to llama-cli in the root directory
-cd ..
-ln -s build/bin/llama-cli llama-cli
-
-# Download BitNet model
-mkdir -p models
-huggingface-cli download microsoft/BitNet-b1.58-2B-4T-gguf --local-dir models/BitNet-b1.58-2B-4T
-
-# Setup BitNet environment
-python setup_env.py -md models/BitNet-b1.58-2B-4T -q i2_s
-
-# Return to original directory
-cd ..
 
 # Create models directory if it doesn't exist
 mkdir -p models
@@ -354,11 +388,6 @@ huggingface-cli download google/gemma-3-1b-it-gguf --local-dir models/gemma-3-1b
 # Create a symbolic link to the model file
 cd models
 ln -s gemma-3-1b-it/gemma-3-1b-it-q4_0.gguf gemma-3-1b-it-q4_0.gguf
-cd ..
-
-# Create a symbolic link to the BitNet model
-cd models
-ln -s BitNet/models/BitNet-b1.58-2B-4T/ggml-model-i2_s.gguf bitnet-model-i2_s.gguf
 cd ..
 
 echo "Setup complete! You can now run the application with:"
