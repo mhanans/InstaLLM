@@ -341,7 +341,14 @@ setup_bitnet() {
     mkdir -p models
     cd models
     if [ -f "../BitNet/models/BitNet-b1.58-2B-4T/ggml-model-i2_s.gguf" ]; then
-        ln -sf ../BitNet/models/BitNet-b1.58-2B-4T/ggml-model-i2_s.gguf ggml-model-i2_s.gguf
+        # Convert the model to a compatible format if needed
+        if ! ../BitNet/llama-cli -m "../BitNet/models/BitNet-b1.58-2B-4T/ggml-model-i2_s.gguf" --version > /dev/null 2>&1; then
+            echo "Converting BitNet model to compatible format..."
+            ../BitNet/llama-cli -m "../BitNet/models/BitNet-b1.58-2B-4T/ggml-model-i2_s.gguf" --convert -o "bitnet-compatible.gguf"
+            ln -sf bitnet-compatible.gguf ggml-model-i2_s.gguf
+        else
+            ln -sf "../BitNet/models/BitNet-b1.58-2B-4T/ggml-model-i2_s.gguf" ggml-model-i2_s.gguf
+        fi
     fi
     cd ..
 }
