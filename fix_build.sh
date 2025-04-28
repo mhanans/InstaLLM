@@ -51,16 +51,30 @@ make -j$(nproc)
 # Create bin directory and copy llama-cli
 cd ..
 mkdir -p bin
+
+# Handle llama-cli binary
 if [ -f "build/bin/llama-cli" ]; then
-    # Remove existing symlink if it exists
-    if [ -L "bin/llama-cli" ]; then
-        rm bin/llama-cli
-    fi
+    echo "Copying llama-cli binary..."
+    # Remove any existing file or symlink in bin directory
+    rm -f bin/llama-cli
     # Copy the binary directly
-    cp build/bin/llama-cli bin/
+    cp -f build/bin/llama-cli bin/
     chmod +x bin/llama-cli
+    
+    # Verify the copy was successful and the binary is executable
+    if [ -x "bin/llama-cli" ]; then
+        echo "Successfully copied and verified llama-cli binary"
+        echo "Binary location: $(pwd)/bin/llama-cli"
+        echo "Binary permissions: $(ls -l bin/llama-cli)"
+    else
+        echo "Error: Failed to copy or make llama-cli binary executable"
+        exit 1
+    fi
 else
-    echo "Error: llama-cli binary not found after build"
+    echo "Error: llama-cli binary not found in build/bin/"
+    echo "Current directory: $(pwd)"
+    echo "Build directory contents:"
+    ls -la build/bin/
     exit 1
 fi
 
@@ -75,6 +89,15 @@ fi
 
 # Setup BitNet environment
 python setup_env.py -md models/BitNet-b1.58-2B-4T -q i2_s
+
+# Verify final setup
+echo "Verifying final setup..."
+if [ -x "bin/llama-cli" ]; then
+    echo "llama-cli is present and executable"
+else
+    echo "Error: llama-cli is not present or not executable in final setup"
+    exit 1
+fi
 
 # Return to original directory
 cd ..
