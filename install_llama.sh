@@ -29,9 +29,30 @@ package_installed() {
     fi
 }
 
+# Function to wait for package manager lock
+wait_for_package_manager() {
+    print_highlight "Checking package manager status..."
+    
+    if command_exists apt-get; then
+        while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
+            echo "Waiting for package manager to be available..."
+            sleep 5
+        done
+        
+        # Also check for unattended-upgrades
+        while pgrep -f unattended-upgrade >/dev/null; do
+            echo "Waiting for unattended-upgrades to complete..."
+            sleep 5
+        done
+    fi
+}
+
 # Function to install system dependencies
 install_system_dependencies() {
     print_highlight "Checking system dependencies..."
+    
+    # Wait for package manager to be available
+    wait_for_package_manager
     
     local packages=("build-essential" "cmake" "python3-dev" "libomp-dev" "libcurl4-openssl-dev")
     
