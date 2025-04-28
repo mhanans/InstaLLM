@@ -156,6 +156,9 @@ Always maintain a helpful and professional tone. If you're unsure about somethin
         
         print(f"Available models: {self.available_models}")
         print(f"Available BitNet models: {list(self.bitnet_models.keys())}")
+        
+        # Return all available models for the dropdown
+        return self.available_models + list(self.bitnet_models.keys())
     
     def load_model(self, model_name: str) -> str:
         """Load a specific model into memory"""
@@ -165,20 +168,25 @@ Always maintain a helpful and professional tone. If you're unsure about somethin
         if model_name not in self.available_models and model_name not in self.bitnet_models:
             return f"Model {model_name} not found!"
         
-        if model_name in self.bitnet_models:
-            try:
+        try:
+            if model_name in self.bitnet_models:
                 # Initialize BitNet model
                 model_path = self.bitnet_models[model_name]
+                if not os.path.exists(model_path):
+                    return f"Error: BitNet model file not found at {model_path}"
+                
                 self.models[model_name] = {
                     "type": "bitnet",
                     "path": model_path
                 }
+                print(f"Loaded BitNet model: {model_name} from {model_path}")
                 return f"BitNet model {model_name} loaded successfully!"
-            except Exception as e:
-                return f"Error loading BitNet model: {str(e)}"
-        else:
-            try:
+            else:
+                # Initialize regular LLM model
                 model_path = os.path.join(self.models_dir, model_name)
+                if not os.path.exists(model_path):
+                    return f"Error: Model file not found at {model_path}"
+                
                 self.models[model_name] = {
                     "type": "llama",
                     "model": Llama(
@@ -189,9 +197,12 @@ Always maintain a helpful and professional tone. If you're unsure about somethin
                 }
                 # Initialize conversation history for this model
                 self.conversation_history[model_name] = []
+                print(f"Loaded LLM model: {model_name} from {model_path}")
                 return f"Model {model_name} loaded successfully!"
-            except Exception as e:
-                return f"Error loading model: {str(e)}"
+        except Exception as e:
+            error_msg = f"Error loading model {model_name}: {str(e)}"
+            print(error_msg)
+            return error_msg
     
     def generate_response(self, model_name: str, prompt: str) -> str:
         """Generate response from the selected model"""
@@ -203,6 +214,8 @@ Always maintain a helpful and professional tone. If you're unsure about somethin
         
         try:
             # Add the new user message to conversation history
+            if model_name not in self.conversation_history:
+                self.conversation_history[model_name] = []
             self.conversation_history[model_name].append({"role": "user", "content": prompt})
             
             # Build the full conversation context
@@ -230,10 +243,6 @@ Always maintain a helpful and professional tone. If you're unsure about somethin
             if model_info["type"] == "bitnet":
                 # Run BitNet inference with enhanced error handling
                 try:
-                    # First, verify the model file exists
-                    if not os.path.exists(model_info["path"]):
-                        return f"Error: BitNet model file not found at {model_info['path']}"
-                    
                     # Verify run_inference.py exists
                     if not os.path.exists("run_inference.py"):
                         return "Error: run_inference.py not found. Please ensure it's in the same directory as app.py"
@@ -266,6 +275,9 @@ Always maintain a helpful and professional tone. If you're unsure about somethin
                     if not response_text:
                         return "Error: BitNet returned empty response"
                     
+                    # Add the assistant's response to conversation history
+                    self.conversation_history[model_name].append({"role": "assistant", "content": response_text})
+                    
                     return response_text
                     
                 except Exception as e:
@@ -285,13 +297,15 @@ Always maintain a helpful and professional tone. If you're unsure about somethin
                 )
                 response_text = response['choices'][0]['text'].strip()
                 response_text = response_text.replace("</|assistant|>", "").strip()
-            
-            # Add the assistant's response to conversation history
-            self.conversation_history[model_name].append({"role": "assistant", "content": response_text})
-            
-            return response_text
+                
+                # Add the assistant's response to conversation history
+                self.conversation_history[model_name].append({"role": "assistant", "content": response_text})
+                
+                return response_text
         except Exception as e:
-            return f"Error generating response: {str(e)}"
+            error_msg = f"Error generating response: {str(e)}"
+            print(error_msg)  # Debug output
+            return error_msg
 
 def create_interface():
     insta_llm = InstaLLM()
@@ -313,10 +327,11 @@ def create_interface():
         with gr.Row():
             with gr.Column(scale=1):
                 model_dropdown = gr.Dropdown(
-                    choices=insta_llm.available_models + list(insta_llm.bitnet_models.keys()),
+                    choices=insta_llm._load_available_models(),
                     label="Select Model",
                     interactive=True,
-                    value=insta_llm.available_models[0] if insta_llm.available_models else None
+                    value=insta_llm.available_models[0] if insta_llm.available_models else None,
+                    allow_custom_value=False
                 )
                 load_button = gr.Button("Load Model", variant="primary")
                 load_status = gr.Textbox(
@@ -344,9 +359,8 @@ def create_interface():
         """)
         
         def update_model_list():
-            insta_llm._load_available_models()
-            return {"choices": insta_llm.available_models + list(insta_llm.bitnet_models.keys()), 
-                    "value": insta_llm.available_models[0] if insta_llm.available_models else None}
+            choices = insta_llm._load_available_models()
+            return {"choices": choices, "value": choices[0] if choices else None}
         
         def load_selected_model(model_name):
             return insta_llm.load_model(model_name)
