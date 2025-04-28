@@ -314,14 +314,26 @@ setup_bitnet() {
         -DCMAKE_BUILD_TYPE=Release \
         -DLLAMA_OPENMP=ON \
         -DLLAMA_CURL=ON \
-        -DBUILD_SHARED_LIBS=ON
+        -DBUILD_SHARED_LIBS=ON \
+        -DLLAMA_NATIVE=OFF \
+        -DLLAMA_AVX=ON \
+        -DLLAMA_AVX2=ON \
+        -DLLAMA_F16C=ON \
+        -DLLAMA_FMA=ON
     
+    # Build the project
     make -j$(nproc)
     
-    # Create symlink to llama-cli in the correct location
+    # Create bin directory and copy llama-cli
     cd ..
     mkdir -p bin
-    ln -sf build/bin/llama-cli bin/llama-cli
+    if [ -f "build/bin/llama-cli" ]; then
+        cp build/bin/llama-cli bin/
+        chmod +x bin/llama-cli
+    else
+        echo "Error: llama-cli binary not found after build"
+        exit 1
+    fi
     
     # Check if model already exists
     if [ ! -f "models/BitNet-b1.58-2B-4T/ggml-model-i2_s.gguf" ]; then
@@ -357,7 +369,12 @@ def run_inference():
     args = parser.parse_args()
     
     # Get the absolute path to llama-cli
-    llama_cli_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'bin', 'llama-cli')
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    llama_cli_path = os.path.join(script_dir, 'bin', 'llama-cli')
+    
+    if not os.path.exists(llama_cli_path):
+        print(f"Error: llama-cli not found at {llama_cli_path}")
+        exit(1)
     
     command = [
         llama_cli_path,
@@ -371,6 +388,7 @@ def run_inference():
     if args.cnv:
         command.append('-cnv')
     
+    print(f"Running command: {' '.join(command)}")  # Debug output
     run_command(command)
 
 if __name__ == '__main__':
