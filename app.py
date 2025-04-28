@@ -74,6 +74,8 @@ custom_css = """
     border-radius: 5px !important;
     padding: 1rem !important;
     font-size: 1rem !important;
+    color: var(--text-color) !important;
+    background: white !important;
 }
 
 .gradio-textbox:focus {
@@ -85,6 +87,13 @@ custom_css = """
     border: 2px solid var(--border-color) !important;
     border-radius: 5px !important;
     padding: 0.5rem !important;
+    color: var(--text-color) !important;
+    background: white !important;
+}
+
+.gradio-dropdown option {
+    color: var(--text-color) !important;
+    background: white !important;
 }
 
 .gradio-footer {
@@ -97,7 +106,7 @@ custom_css = """
 """
 
 class InstaLLM:
-    def __init__(self, models_dir: str = "model"):
+    def __init__(self, models_dir: str = "models"):
         self.models_dir = models_dir
         self.models: Dict[str, Llama] = {}
         self.available_models = []
@@ -115,9 +124,13 @@ class InstaLLM:
         for file in os.listdir(self.models_dir):
             if file.endswith(".gguf"):
                 self.available_models.append(file)
+        print(f"Found models: {self.available_models}")  # Debug print
     
     def load_model(self, model_name: str) -> str:
         """Load a specific model into memory"""
+        if not model_name:
+            return "Please select a model first!"
+            
         if model_name not in self.available_models:
             return f"Model {model_name} not found!"
         
@@ -132,6 +145,9 @@ class InstaLLM:
     
     def generate_response(self, model_name: str, prompt: str) -> str:
         """Generate response from the selected model"""
+        if not model_name:
+            return "Please select a model first!"
+            
         if model_name not in self.models:
             return "Please load the model first!"
         
@@ -146,7 +162,7 @@ def create_interface():
     
     with gr.Blocks(
         title="InstaLLM by HANYA.inc",
-        theme=gr.themes.Soft(),
+        theme=gr.themes.Soft(primary_hue="blue"),
         css=custom_css
     ) as interface:
         with gr.Row():
@@ -163,7 +179,8 @@ def create_interface():
                 model_dropdown = gr.Dropdown(
                     choices=insta_llm.available_models,
                     label="Select Model",
-                    interactive=True
+                    interactive=True,
+                    value=insta_llm.available_models[0] if insta_llm.available_models else None
                 )
                 load_button = gr.Button("Load Model", variant="primary")
                 load_status = gr.Textbox(
@@ -192,7 +209,7 @@ def create_interface():
         
         def update_model_list():
             insta_llm._load_available_models()
-            return {"choices": insta_llm.available_models}
+            return {"choices": insta_llm.available_models, "value": insta_llm.available_models[0] if insta_llm.available_models else None}
         
         def load_selected_model(model_name):
             return insta_llm.load_model(model_name)
