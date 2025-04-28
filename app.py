@@ -268,12 +268,12 @@ Always maintain a helpful and professional tone. If you're unsure about somethin
                     
                     print(f"Running BitNet command: {' '.join(cmd)}")  # Debug output
                     
-                    # Set the working directory to BitNet
+                    # Set the working directory to the current directory
                     result = subprocess.run(
                         cmd,
                         capture_output=True,
                         text=True,
-                        cwd="BitNet"
+                        cwd=os.getcwd()  # Use current working directory
                     )
                     
                     if result.returncode != 0:
