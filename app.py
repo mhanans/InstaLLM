@@ -149,7 +149,7 @@ Always maintain a helpful and professional tone. If you're unsure about somethin
         for file in os.listdir(self.models_dir):
             if file.endswith(".gguf"):
                 # Check if it's a BitNet model
-                if "bitnet" in file.lower():
+                if "ggml" in file.lower():
                     self.bitnet_models[file] = os.path.join(self.models_dir, file)
                 else:
                     self.available_models.append(file)
