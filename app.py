@@ -27,17 +27,27 @@ custom_css = """
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1) !important;
 }
 
-.gradio-header h1 {
+/* Add specific styling for markdown content */
+.gradio-markdown h1 {
     color: white !important;
     font-size: 2.5rem !important;
     margin: 0 !important;
     text-align: center !important;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3) !important;
 }
 
-.gradio-header p {
+.gradio-markdown h2 {
     color: rgba(255, 255, 255, 0.9) !important;
     text-align: center !important;
     margin: 0.5rem 0 0 0 !important;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.2) !important;
+}
+
+.gradio-markdown p {
+    color: rgba(255, 255, 255, 0.9) !important;
+    text-align: center !important;
+    margin: 0.5rem 0 0 0 !important;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.2) !important;
 }
 
 .gradio-interface {
