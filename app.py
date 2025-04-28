@@ -192,7 +192,7 @@ def create_interface():
         
         def update_model_list():
             insta_llm._load_available_models()
-            return gr.Dropdown.update(choices=insta_llm.available_models)
+            return {"choices": insta_llm.available_models}
         
         def load_selected_model(model_name):
             return insta_llm.load_model(model_name)
