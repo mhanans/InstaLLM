@@ -318,9 +318,10 @@ setup_bitnet() {
     
     make -j$(nproc)
     
-    # Create symlink to llama-cli
+    # Create symlink to llama-cli in the correct location
     cd ..
-    ln -sf build/bin/llama-cli llama-cli
+    mkdir -p bin
+    ln -sf build/bin/llama-cli bin/llama-cli
     
     # Check if model already exists
     if [ ! -f "models/BitNet-b1.58-2B-4T/ggml-model-i2_s.gguf" ]; then
@@ -334,6 +335,50 @@ setup_bitnet() {
     # Setup BitNet environment
     python setup_env.py -md models/BitNet-b1.58-2B-4T -q i2_s
     
+    # Create run_inference.py script
+    cat > run_inference.py << 'EOF'
+#!/usr/bin/env python3
+import subprocess
+import argparse
+import os
+
+def run_command(command, shell=False):
+    subprocess.run(command, shell=shell, check=True)
+
+def run_inference():
+    parser = argparse.ArgumentParser(description='Run BitNet inference')
+    parser.add_argument('-m', '--model', required=True, help='Path to the model file')
+    parser.add_argument('-p', '--prompt', required=True, help='Prompt text')
+    parser.add_argument('-cnv', action='store_true', help='Enable conversation mode')
+    parser.add_argument('-t', '--threads', default='4', help='Number of threads')
+    parser.add_argument('-c', '--context', default='2048', help='Context size')
+    parser.add_argument('-temp', '--temperature', default='0.7', help='Temperature')
+    
+    args = parser.parse_args()
+    
+    # Get the absolute path to llama-cli
+    llama_cli_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'bin', 'llama-cli')
+    
+    command = [
+        llama_cli_path,
+        '-m', args.model,
+        '-p', args.prompt,
+        '-t', args.threads,
+        '-c', args.context,
+        '--temp', args.temperature
+    ]
+    
+    if args.cnv:
+        command.append('-cnv')
+    
+    run_command(command)
+
+if __name__ == '__main__':
+    run_inference()
+EOF
+    
+    chmod +x run_inference.py
+    
     # Return to original directory
     cd ..
     
@@ -341,14 +386,7 @@ setup_bitnet() {
     mkdir -p models
     cd models
     if [ -f "../BitNet/models/BitNet-b1.58-2B-4T/ggml-model-i2_s.gguf" ]; then
-        # Convert the model to a compatible format if needed
-        if ! ../BitNet/llama-cli -m "../BitNet/models/BitNet-b1.58-2B-4T/ggml-model-i2_s.gguf" --version > /dev/null 2>&1; then
-            echo "Converting BitNet model to compatible format..."
-            ../BitNet/llama-cli -m "../BitNet/models/BitNet-b1.58-2B-4T/ggml-model-i2_s.gguf" --convert -o "bitnet-compatible.gguf"
-            ln -sf bitnet-compatible.gguf ggml-model-i2_s.gguf
-        else
-            ln -sf "../BitNet/models/BitNet-b1.58-2B-4T/ggml-model-i2_s.gguf" ggml-model-i2_s.gguf
-        fi
+        ln -sf "../BitNet/models/BitNet-b1.58-2B-4T/ggml-model-i2_s.gguf" ggml-model-i2_s.gguf
     fi
     cd ..
 }
