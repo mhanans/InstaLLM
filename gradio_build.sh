@@ -1,17 +1,31 @@
 #!/bin/bash
 
+# Exit on error
+set -e
+
 # Configuration
-PYTHON_VERSION="3.10"
 INSTALL_DIR="$(pwd)/install_dir"
-CONDA_ROOT="${INSTALL_DIR}/conda"
-ENV_DIR="${INSTALL_DIR}/env"
-REQUIREMENTS_FILE="requirements.txt"
+CONDA_ROOT="$INSTALL_DIR/conda"
+ENV_DIR="$INSTALL_DIR/env"
+PYTHON_VERSION="3.10"
+MODEL_PATH="models/gemma-3-1b-it-q4_0.gguf"
+MODEL_URL="https://drive.google.com/uc?export=download&id=14kzV0ObIq81fBYaWR1vRPIYEvm_UHXw5"
 
 # Function to print highlighted messages
 print_highlight() {
-    echo -e "\n******************************************************"
-    echo -e "$1"
-    echo -e "******************************************************\n"
+    local message="${1}"
+    echo "" && echo "******************************************************"
+    echo "$message"
+    echo "******************************************************" && echo ""
+}
+
+# Function to check if path contains spaces
+check_path_spaces() {
+    if [[ "$1" == *" "* ]]; then
+        echo "Error: Path contains spaces: $1"
+        echo "Please use a path without spaces"
+        exit 1
+    fi
 }
 
 # Function to check if a command exists
@@ -19,176 +33,284 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
-# Function to check path for spaces
-check_path_for_spaces() {
-    if [[ $PWD =~ \  ]]; then
-        echo "The current workdir has whitespace which can lead to unintended behaviour. Please modify your path and continue later."
+# Function to check if a package is installed
+package_installed() {
+    if command_exists apt-get; then
+        dpkg -l | grep -q "^ii  $1 "
+    elif command_exists yum; then
+        rpm -q "$1" >/dev/null 2>&1
+    elif command_exists dnf; then
+        dnf list installed "$1" >/dev/null 2>&1
+    else
+        return 1
+    fi
+}
+
+# Function to wait for package manager lock
+wait_for_package_manager() {
+    print_highlight "Checking package manager status..."
+    
+    if command_exists apt-get; then
+        while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
+            echo "Waiting for package manager to be available..."
+            sleep 5
+        done
+        
+        while pgrep -f unattended-upgrade >/dev/null; do
+            echo "Waiting for unattended-upgrades to complete..."
+            sleep 5
+        done
+    fi
+}
+
+# Function to install system dependencies
+install_system_dependencies() {
+    print_highlight "Checking system dependencies..."
+    
+    wait_for_package_manager
+    
+    local packages=("build-essential" "cmake" "python3-dev" "libomp-dev" "libcurl4-openssl-dev")
+    
+    local to_install=()
+    
+    for pkg in "${packages[@]}"; do
+        if ! package_installed "$pkg"; then
+            to_install+=("$pkg")
+        fi
+    done
+    
+    if [ ${#to_install[@]} -eq 0 ]; then
+        echo "All system dependencies are already installed."
+        return
+    fi
+    
+    echo "Installing missing system dependencies: ${to_install[*]}"
+    
+    if command_exists apt-get; then
+        sudo apt-get update
+        sudo apt-get install -y "${to_install[@]}"
+        sudo ln -sf /usr/lib/x86_64-linux-gnu/libgomp.so.1 /usr/lib/libgomp.so.1
+    elif command_exists yum; then
+        sudo yum groupinstall -y "Development Tools"
+        sudo yum install -y "${to_install[@]}"
+    elif command_exists dnf; then
+        sudo dnf groupinstall -y "Development Tools"
+        sudo dnf install -y "${to_install[@]}"
+    else
+        echo "Error: Could not detect package manager. Please install the following packages manually:"
+        echo "${packages[@]}"
         exit 1
     fi
+}
+
+# Function to check if a Python package is installed
+python_package_installed() {
+    pip show "$1" >/dev/null 2>&1
+}
+
+# Function to install Python dependencies
+install_python_dependencies() {
+    print_highlight "Checking Python dependencies..."
+    
+    # Set OpenMP library path
+    export LD_LIBRARY_PATH="/usr/lib:$LD_LIBRARY_PATH"
+    
+    # Install llama-cpp-python with OpenMP support
+    if ! python_package_installed "llama-cpp-python"; then
+        echo "Installing llama-cpp-python from source with OpenMP support..."
+        CMAKE_ARGS="-DLLAMA_OPENMP=ON -DCMAKE_SHARED_LINKER_FLAGS='-Wl,-rpath,/usr/lib'" pip install llama-cpp-python>=0.2.6 --no-cache-dir
+    else
+        echo "llama-cpp-python is already installed."
+    fi
+    
+    # Install Gradio and other required packages
+    echo "Installing Gradio and other dependencies..."
+    pip install gradio>=4.0.0
+    pip install typing-extensions
+    pip install requests
+    pip install numpy
 }
 
 # Function to install Miniconda
 install_miniconda() {
-    # Miniconda installer is limited to two main architectures: x86_64 and arm64
-    local sys_arch=$(uname -m)
-    case "${sys_arch}" in
-    x86_64*) sys_arch="x86_64" ;;
-    arm64*) sys_arch="aarch64" ;;
-    aarch64*) sys_arch="aarch64" ;;
-    *) {
-        echo "Unknown system architecture: ${sys_arch}! This script runs only on x86_64 or arm64"
-        exit 1
-    } ;;
-    esac
-
-    # if miniconda has not been installed, download and install it
-    if ! "${CONDA_ROOT}/bin/conda" --version &>/dev/null; then
-        if [ ! -d "$INSTALL_DIR/miniconda_installer.sh" ]; then
-            echo "Downloading Miniconda from $miniconda_url"
-            local miniconda_url="https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-${sys_arch}.sh"
-
-            mkdir -p "$INSTALL_DIR"
-            curl -Lk "$miniconda_url" >"$INSTALL_DIR/miniconda_installer.sh"
-        fi
-
-        echo "Installing Miniconda to $CONDA_ROOT"
-        chmod u+x "$INSTALL_DIR/miniconda_installer.sh"
-        bash "$INSTALL_DIR/miniconda_installer.sh" -b -p "$CONDA_ROOT"
-        rm -rf "$INSTALL_DIR/miniconda_installer.sh"
+    print_highlight "Checking Miniconda installation..."
+    
+    if [ -d "$CONDA_ROOT" ]; then
+        echo "Miniconda is already installed at $CONDA_ROOT"
+        return
     fi
-    echo "Miniconda is installed at $CONDA_ROOT"
-
-    # test conda
-    echo "Conda version: "
-    "$CONDA_ROOT/bin/conda" --version || {
-        echo "Conda not found. Will exit now..."
-        exit 1
-    }
+    
+    echo "Installing Miniconda..."
+    check_path_spaces "$INSTALL_DIR"
+    
+    mkdir -p "$INSTALL_DIR"
+    wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O "$INSTALL_DIR/miniconda.sh"
+    bash "$INSTALL_DIR/miniconda.sh" -b -p "$CONDA_ROOT"
+    rm "$INSTALL_DIR/miniconda.sh"
 }
 
-# Function to create conda environment
-create_conda_env() {
-    if [ ! -d "${ENV_DIR}" ]; then
-        echo "Creating conda environment with python=$PYTHON_VERSION in $ENV_DIR"
-        "${CONDA_ROOT}/bin/conda" create -y -k --prefix "$ENV_DIR" python="$PYTHON_VERSION" || {
-            echo "Failed to create conda environment."
-            echo "Will delete the ${ENV_DIR} (if exist) and exit now..."
-            rm -rf $ENV_DIR
-            exit 1
-        }
+# Function to create and activate Conda environment
+setup_conda_env() {
+    print_highlight "Setting up Conda environment..."
+    
+    source "$CONDA_ROOT/etc/profile.d/conda.sh"
+    
+    if [ ! -d "$ENV_DIR" ]; then
+        echo "Creating new Conda environment..."
+        conda create -y -p "$ENV_DIR" python="$PYTHON_VERSION"
     else
-        echo "Conda environment exists at $ENV_DIR"
-    fi
-}
-
-# Function to activate conda environment
-activate_conda_env() {
-    # deactivate the current env(s) to avoid conflicts
-    { conda deactivate && conda deactivate && conda deactivate; } 2>/dev/null
-
-    # check if conda env is broken
-    if [ ! -f "$ENV_DIR/bin/python" ]; then
-        echo "Conda environment appears to be broken. You may need to remove $ENV_DIR and run the installer again."
-        exit 1
-    fi
-
-    source "$CONDA_ROOT/etc/profile.d/conda.sh" # conda init
-    conda activate "$ENV_DIR" || {
-        echo "Failed to activate environment. Please remove $ENV_DIR and run the installer again."
-        exit 1
-    }
-    echo "Activate conda environment at $CONDA_PREFIX"
-}
-
-# Function to deactivate conda environment
-deactivate_conda_env() {
-    if [ "$CONDA_PREFIX" == "$ENV_DIR" ]; then
-        conda deactivate
-        echo "Deactivate conda environment at $ENV_DIR"
-    fi
-}
-
-# Function to verify package installation
-verify_package() {
-    local package=$1
-    if ! python -c "import $package" 2>/dev/null; then
-        echo "Failed to verify $package installation"
-        return 1
-    fi
-    return 0
-}
-
-# Function to install dependencies
-install_dependencies() {
-    print_highlight "Installing Python dependencies..."
-    
-    # Install dependencies
-    pip install --upgrade pip
-    pip install -r $REQUIREMENTS_FILE
-
-    # Verify installations
-    print_highlight "Verifying package installations..."
-    if ! verify_package "gradio"; then
-        echo "Failed to install gradio"
-        exit 1
+        echo "Conda environment already exists at $ENV_DIR"
     fi
     
-    if ! verify_package "llama_cpp"; then
-        echo "Failed to install llama-cpp-python"
+    conda activate "$ENV_DIR"
+    
+    if ! conda list | grep -q "^libgomp"; then
+        echo "Installing OpenMP in conda environment..."
+        conda install -y -c conda-forge libgomp
+    else
+        echo "OpenMP is already installed in conda environment."
+    fi
+}
+
+# Function to find or build llama library
+setup_llama_library() {
+    print_highlight "Setting up llama library..."
+    
+    # Check common library locations
+    local lib_paths=(
+        "/usr/local/lib/libllama.so"
+        "/usr/lib/libllama.so"
+        "/usr/lib/x86_64-linux-gnu/libllama.so"
+        "$(pwd)/libllama.so"
+    )
+    
+    local found_path=""
+    for path in "${lib_paths[@]}"; do
+        if [ -f "$path" ]; then
+            found_path="$path"
+            echo "Found llama library at: $path"
+            break
+        fi
+    done
+    
+    if [ -z "$found_path" ]; then
+        echo "llama library not found. Building from source..."
+        
+        # Install build dependencies
+        sudo apt-get update
+        sudo apt-get install -y build-essential cmake libcurl4-openssl-dev
+        
+        # Clean up existing llama.cpp directory if it exists
+        if [ -d "llama.cpp" ]; then
+            echo "Cleaning up existing llama.cpp directory..."
+            rm -rf llama.cpp
+        fi
+        
+        # Clone and build llama.cpp
+        git clone https://github.com/ggerganov/llama.cpp.git
+        cd llama.cpp
+        
+        # Clean build directory if it exists
+        if [ -d "build" ]; then
+            echo "Cleaning up existing build directory..."
+            rm -rf build
+        fi
+        
+        mkdir build
+        cd build
+        
+        # Configure with CURL support and shared library
+        cmake .. -DLLAMA_CURL=ON -DBUILD_SHARED_LIBS=ON -DCMAKE_BUILD_TYPE=Release
+        
+        # Build the library
+        make -j$(nproc)
+        
+        # Find the built library
+        local built_lib=""
+        if [ -f "libllama.so" ]; then
+            built_lib="libllama.so"
+        elif [ -f "bin/libllama.so" ]; then
+            built_lib="bin/libllama.so"
+        elif [ -f "../libllama.so" ]; then
+            built_lib="../libllama.so"
+        fi
+        
+        if [ -z "$built_lib" ]; then
+            echo "Error: Could not find the built library"
+            exit 1
+        fi
+        
+        echo "Found built library at: $built_lib"
+        
+        # Copy the library to a known location
+        sudo cp "$built_lib" /usr/local/lib/libllama.so
+        sudo ldconfig
+        
+        found_path="/usr/local/lib/libllama.so"
+        cd ../..
+    fi
+    
+    # Verify the library exists
+    if [ ! -f "$found_path" ]; then
+        echo "Error: Failed to find or build llama library"
         exit 1
     fi
-
-    print_highlight "All packages installed successfully"
     
-    # Clear cache
-    conda clean --all -y
-    python -m pip cache purge
+    echo "Using llama library at: $found_path"
+    export LLAMA_LIB_PATH="$found_path"
 }
 
-# Function to create models directory
-create_models_directory() {
-    print_highlight "Creating models directory..."
-    mkdir -p model
-    echo "Models directory created at $(pwd)/model"
-    echo "Please place your .gguf model files in this directory"
+# Function to download model file
+download_model() {
+    print_highlight "Checking model file..."
+    
+    if [ -f "$MODEL_PATH" ]; then
+        echo "Model file already exists at $MODEL_PATH"
+        return
+    fi
+    
+    echo "Downloading model file..."
+    mkdir -p "$(dirname "$MODEL_PATH")"
+    wget -O "$MODEL_PATH" "$MODEL_URL"
 }
 
-# Function to launch the Gradio interface
-launch_interface() {
-    print_highlight "Launching InstaLLM Gradio interface in your browser, please wait..."
-    python app.py || {
-        echo "Failed to launch interface. Will exit now..."
-        exit 1
-    }
+# Function to run the Gradio app
+run_gradio_app() {
+    print_highlight "Starting Gradio app..."
+    
+    # Ensure we're in the correct environment
+    source "$CONDA_ROOT/etc/profile.d/conda.sh"
+    conda activate "$ENV_DIR"
+    
+    # Run the app
+    python app.py
 }
 
-# Main script execution
-check_path_for_spaces
+# Main installation process
+main() {
+    print_highlight "Starting installation process..."
+    
+    # Install system dependencies
+    install_system_dependencies
+    
+    # Install Miniconda
+    install_miniconda
+    
+    # Setup Conda environment
+    setup_conda_env
+    
+    # Install Python dependencies
+    install_python_dependencies
+    
+    # Setup llama library
+    setup_llama_library
+    
+    # Download model file
+    download_model
+    
+    # Run the Gradio app
+    run_gradio_app
+}
 
-print_highlight "Setting up Miniconda"
-install_miniconda
-
-print_highlight "Creating conda environment"
-create_conda_env
-activate_conda_env
-
-print_highlight "Installing requirements"
-install_dependencies
-
-print_highlight "Setting up models directory"
-create_models_directory
-
-print_highlight "Do you want to launch the web UI? [Y/N]"
-read -p "Input> " launch
-launch=${launch,,}
-if [[ "$launch" == "yes" || "$launch" == "y" || "$launch" == "true" ]]; then
-    launch_interface
-else
-    echo "Will exit now..."
-    deactivate_conda_env
-    echo "Please run the installer again to launch the UI."
-    exit 0
-fi
-
-deactivate_conda_env
-read -p "Press enter to continue" 
+# Run main function
+main
