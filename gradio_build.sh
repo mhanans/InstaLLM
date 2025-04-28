@@ -129,6 +129,7 @@ install_python_dependencies() {
     pip install typing-extensions
     pip install requests
     pip install numpy
+    pip install huggingface_hub
 }
 
 # Function to install Miniconda
@@ -314,3 +315,52 @@ main() {
 
 # Run main function
 main
+
+# Clone and setup BitNet
+echo "Setting up BitNet..."
+git clone --recursive https://github.com/microsoft/BitNet.git
+cd BitNet
+
+# Install BitNet dependencies
+pip install -r requirements.txt
+
+# Build BitNet
+mkdir -p build
+cd build
+cmake ..
+make -j$(nproc)
+
+# Create symlink to llama-cli in the root directory
+cd ..
+ln -s build/bin/llama-cli llama-cli
+
+# Download BitNet model
+mkdir -p models
+huggingface-cli download microsoft/BitNet-b1.58-2B-4T-gguf --local-dir models/BitNet-b1.58-2B-4T
+
+# Setup BitNet environment
+python setup_env.py -md models/BitNet-b1.58-2B-4T -q i2_s
+
+# Return to original directory
+cd ..
+
+# Create models directory if it doesn't exist
+mkdir -p models
+
+# Download Gemma model
+echo "Downloading Gemma model..."
+huggingface-cli download google/gemma-3-1b-it-gguf --local-dir models/gemma-3-1b-it
+
+# Create a symbolic link to the model file
+cd models
+ln -s gemma-3-1b-it/gemma-3-1b-it-q4_0.gguf gemma-3-1b-it-q4_0.gguf
+cd ..
+
+# Create a symbolic link to the BitNet model
+cd models
+ln -s BitNet/models/BitNet-b1.58-2B-4T/ggml-model-i2_s.gguf bitnet-model-i2_s.gguf
+cd ..
+
+echo "Setup complete! You can now run the application with:"
+echo "conda activate gradio-env"
+echo "python app.py"

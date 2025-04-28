@@ -243,15 +243,21 @@ Always maintain a helpful and professional tone. If you're unsure about somethin
             if model_info["type"] == "bitnet":
                 # Run BitNet inference with enhanced error handling
                 try:
+                    # Verify llama-cli exists
+                    llama_cli_path = os.path.join("BitNet", "llama-cli")
+                    if not os.path.exists(llama_cli_path):
+                        return "Error: llama-cli not found. Please run setup_bitnet.sh first."
+                    
                     # Verify run_inference.py exists
-                    if not os.path.exists("run_inference.py"):
-                        return "Error: run_inference.py not found. Please ensure it's in the same directory as app.py"
+                    run_inference_path = os.path.join("BitNet", "run_inference.py")
+                    if not os.path.exists(run_inference_path):
+                        return "Error: run_inference.py not found. Please run setup_bitnet.sh first."
                     
                     # Run inference with full path to Python
                     python_path = sys.executable
                     cmd = [
                         python_path,
-                        "run_inference.py",
+                        run_inference_path,
                         "-m", model_info["path"],
                         "-p", conversation_context,
                         "-cnv",
@@ -262,7 +268,13 @@ Always maintain a helpful and professional tone. If you're unsure about somethin
                     
                     print(f"Running BitNet command: {' '.join(cmd)}")  # Debug output
                     
-                    result = subprocess.run(cmd, capture_output=True, text=True)
+                    # Set the working directory to BitNet
+                    result = subprocess.run(
+                        cmd,
+                        capture_output=True,
+                        text=True,
+                        cwd="BitNet"
+                    )
                     
                     if result.returncode != 0:
                         error_msg = f"BitNet inference error (code {result.returncode}):\n"
