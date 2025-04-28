@@ -133,8 +133,17 @@ class InstaLLM:
         self.available_models = []
         for file in os.listdir(self.models_dir):
             if file.endswith(".gguf"):
-                self.available_models.append(file)
-        print(f"Found models: {self.available_models}")  # Debug print
+                # Try to validate the model file
+                try:
+                    model_path = os.path.join(self.models_dir, file)
+                    # Quick check if the model is loadable
+                    test_model = Llama(model_path=model_path, n_ctx=1)
+                    del test_model  # Clean up
+                    self.available_models.append(file)
+                    print(f"Validated model: {file}")
+                except Exception as e:
+                    print(f"Warning: Model {file} is not compatible: {str(e)}")
+        print(f"Available models: {self.available_models}")
     
     def load_model(self, model_name: str) -> str:
         """Load a specific model into memory"""
@@ -147,7 +156,11 @@ class InstaLLM:
         if model_name not in self.models:
             try:
                 model_path = os.path.join(self.models_dir, model_name)
-                self.models[model_name] = Llama(model_path=model_path)
+                self.models[model_name] = Llama(
+                    model_path=model_path,
+                    n_ctx=2048,  # Adjust context size as needed
+                    n_threads=4   # Adjust thread count as needed
+                )
                 return f"Model {model_name} loaded successfully!"
             except Exception as e:
                 return f"Error loading model: {str(e)}"
@@ -219,7 +232,10 @@ def create_interface():
         
         def update_model_list():
             insta_llm._load_available_models()
-            return {"choices": insta_llm.available_models, "value": insta_llm.available_models[0] if insta_llm.available_models else None}
+            return gr.Dropdown.update(
+                choices=insta_llm.available_models,
+                value=insta_llm.available_models[0] if insta_llm.available_models else None
+            )
         
         def load_selected_model(model_name):
             return insta_llm.load_model(model_name)
